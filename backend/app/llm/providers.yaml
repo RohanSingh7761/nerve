@@ -1,0 +1,74 @@
+# Model names are best-effort defaults. Verify against each provider's current model list.
+providers:
+  gemini:
+    prefix: gemini
+    key_env: GEMINI_API_KEY
+    models:
+      triage: gemini-2.0-flash
+      strong: gemini-2.5-flash
+      verify: gemini-2.5-flash
+    rpm: 10
+
+  groq:
+    prefix: groq
+    key_env: GROQ_API_KEY
+    models:
+      triage: llama-3.1-8b-instant
+      strong: llama-3.3-70b-versatile
+      verify: llama-3.3-70b-versatile
+    rpm: 20
+
+  openrouter:
+    prefix: openrouter
+    key_env: OPENROUTER_API_KEY
+    models:
+      triage: "meta-llama/llama-3.3-70b-instruct:free"
+      strong: "meta-llama/llama-3.3-70b-instruct:free"
+      verify: "meta-llama/llama-3.3-70b-instruct:free"
+    rpm: 10
+
+  mistral:
+    prefix: mistral
+    key_env: MISTRAL_API_KEY
+    models:
+      triage: mistral-small-latest
+      strong: mistral-large-latest
+      verify: mistral-large-latest
+    rpm: 10
+
+  ollama:
+    prefix: ollama
+    base_env: OLLAMA_API_BASE
+    models:
+      triage: "llama3.1:8b"
+      strong: "qwen2.5:14b"
+      verify: "qwen2.5:14b"
+    rpm: 1000
+
+  anthropic:
+    prefix: anthropic
+    key_env: ANTHROPIC_API_KEY
+    models:
+      triage: claude-3-5-haiku-latest
+      strong: claude-3-5-sonnet-latest
+      verify: claude-3-5-sonnet-latest
+    rpm: 50
+
+  openai:
+    prefix: openai
+    key_env: OPENAI_API_KEY
+    models:
+      triage: gpt-4o-mini
+      strong: gpt-4o
+      verify: gpt-4o
+    rpm: 50
+
+  custom:
+    prefix: openai
+    key_env: CUSTOM_OPENAI_API_KEY
+    base_env: CUSTOM_OPENAI_BASE_URL
+    models:
+      triage: gpt-4o-mini
+      strong: gpt-4o
+      verify: gpt-4o
+    rpm: 30
