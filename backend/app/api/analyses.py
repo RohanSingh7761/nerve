@@ -98,6 +98,40 @@ async def create_analysis(
     }
 
 
+@router.post("/{analysis_id}/cancel")
+async def cancel_analysis(
+    analysis_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """Cancel an active or queued APK triage analysis."""
+    analysis = await db.get(Analysis, analysis_id)
+    if not analysis:
+        raise HTTPException(status_code=404, detail="Analysis not found")
+
+    if analysis.status in {"completed", "failed", "cancelled"}:
+        return {"status": analysis.status, "message": f"Analysis already {analysis.status}"}
+
+    analysis.status = "cancelled"
+
+    # Cancel associated queued/claimed jobs
+    stmt = select(Job).where(Job.analysis_id == analysis_id, Job.state.in_(["queued", "claimed"]))
+    res = await db.execute(stmt)
+    jobs = res.scalars().all()
+    for j in jobs:
+        j.state = "failed"
+
+    # Add cancelled event
+    event = AnalysisEvent(
+        analysis_id=analysis_id,
+        type="analysis_cancelled",
+        payload={"message": "Analysis cancelled by user"},
+    )
+    db.add(event)
+    await db.commit()
+
+    return {"status": "cancelled", "analysis_id": str(analysis_id)}
+
+
 @router.get("")
 async def list_analyses(
     limit: int = 20,

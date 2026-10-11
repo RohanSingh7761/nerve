@@ -91,12 +91,35 @@ async def process_analysis_job(job_id: int, analysis_id: uuid.UUID) -> None:
             "reports": None,
         }
 
-        # Run the multi-agent LangGraph workflow
+        # Check if cancelled before starting
+        async with AsyncSessionLocal() as session:
+            chk = await session.get(Analysis, analysis_id)
+            if chk and chk.status == "cancelled":
+                logger.info("Analysis %s was cancelled before start", analysis_id)
+                return
+
+        # Run the multi-agent LangGraph workflow with Neatlogs tracing
         logger.info("Executing LangGraph for analysis %s", analysis_id)
-        final_state = await graph.ainvoke(
-            initial_state,
-            config={"configurable": {"thread_id": str(analysis_id)}},
-        )
+        try:
+            import neatlogs
+            with neatlogs.trace(name=f"triage-{analysis.sha256[:8]}", kind="WORKFLOW"):
+                final_state = await graph.ainvoke(
+                    initial_state,
+                    config={"configurable": {"thread_id": str(analysis_id)}},
+                )
+            neatlogs.flush()
+        except ImportError:
+            final_state = await graph.ainvoke(
+                initial_state,
+                config={"configurable": {"thread_id": str(analysis_id)}},
+            )
+
+        # Check if cancelled mid-run
+        async with AsyncSessionLocal() as session:
+            chk = await session.get(Analysis, analysis_id)
+            if chk and chk.status == "cancelled":
+                logger.info("Analysis %s cancelled during run; discarding partial state", analysis_id)
+                return
 
         # Extract and persist all results
         meta_data = final_state.get("apk_meta", {})

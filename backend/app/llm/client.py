@@ -113,6 +113,10 @@ def resolve_model(provider: str, tier: str) -> str:
         model_name = cfg["models"].get(tier, cfg["models"].get("triage", ""))
 
     prefix = cfg.get("prefix", "")
+    # If provider is gemini and model_name has models/ prefix, strip it so litellm formats as gemini/<model>
+    if prefix == "gemini" and model_name.startswith("models/"):
+        model_name = model_name[len("models/"):]
+
     if prefix and not model_name.startswith(f"{prefix}/"):
         return f"{prefix}/{model_name}"
     return model_name

@@ -47,9 +47,12 @@ def analyze_apk_static(apk_path: str | Path) -> AndroguardAnalysisResult:
     apk_path = Path(apk_path).resolve()
 
     try:
-        from androguard.core.bytecodes.apk import APK
-        from androguard.core.bytecodes.dvm import DalvikVMFormat
-        from androguard.core.analysis.analysis import Analysis
+        try:
+            from androguard.core.apk import APK
+            from androguard.core.dex import DEX
+        except ImportError:
+            from androguard.core.bytecodes.apk import APK
+            from androguard.core.bytecodes.dvm import DalvikVMFormat as DEX
 
         a = APK(str(apk_path))
 
@@ -91,7 +94,7 @@ def analyze_apk_static(apk_path: str | Path) -> AndroguardAnalysisResult:
         try:
             dex_files = a.get_all_dex()
             for dex_bytes in dex_files:
-                d = DalvikVMFormat(dex_bytes)
+                d = DEX(dex_bytes)
                 for s in d.get_strings():
                     # Keep strings of reasonable length
                     if 4 <= len(s) <= 256:
@@ -115,7 +118,7 @@ def analyze_apk_static(apk_path: str | Path) -> AndroguardAnalysisResult:
         )
 
     except Exception as exc:
-        logger.warning("Androguard parsing failed for %s: %exc", apk_path, exc)
+        logger.warning("Androguard parsing failed for %s: %s", apk_path, exc)
         # Fallback to minimal placeholder
         return AndroguardAnalysisResult(
             package_name="unknown.package",

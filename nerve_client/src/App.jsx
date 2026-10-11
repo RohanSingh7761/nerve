@@ -152,6 +152,20 @@ export default function App() {
     }
   };
 
+  const handleCancelScan = async () => {
+    if (!currentAnalysisId) return;
+    try {
+      await fetch(`/api/analyses/${currentAnalysisId}/cancel`, { method: 'POST' });
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+      }
+      setAnalysisData((prev) => (prev ? { ...prev, status: 'cancelled' } : prev));
+      loadAnalyses();
+    } catch (e) {
+      console.error('Cancel failed:', e);
+    }
+  };
+
   // 5. Open Evidence Drawer
   const openArtifactDrawer = async (shortId) => {
     if (!currentAnalysisId) return;
@@ -360,6 +374,24 @@ export default function App() {
                       ${analysisData.reference_cost_usd?.toFixed(4) || '0.0000'}
                     </strong>{' '}
                     <span style={{ color: 'var(--text-dim)' }}>(Free Tier: $0.00)</span>
+                    {(analysisData.status === 'running' || analysisData.status === 'queued') && (
+                      <button
+                        onClick={handleCancelScan}
+                        style={{
+                          marginLeft: '16px',
+                          background: 'rgba(244, 63, 94, 0.2)',
+                          color: 'var(--accent-rose)',
+                          border: '1px solid var(--accent-rose)',
+                          padding: '4px 12px',
+                          borderRadius: '6px',
+                          fontSize: '12px',
+                          fontWeight: '600',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        ⏹ Cancel Scan
+                      </button>
+                    )}
                   </div>
                 </div>
               )}

@@ -27,7 +27,8 @@ _worker_task: asyncio.Task | None = None
 async def lifespan(app: FastAPI):
     """Application startup and shutdown lifecycle."""
     settings = get_settings()
-    logger.info("Initializing Nerve backend...")
+    from app.obs import init_neatlogs
+    init_neatlogs()
 
     # Ensure samples and artifacts directories exist
     settings.samples_path.mkdir(parents=True, exist_ok=True)
