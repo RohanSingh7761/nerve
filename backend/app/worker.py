@@ -277,6 +277,23 @@ async def poll_jobs_loop() -> None:
     worker_id = f"worker-{uuid.uuid4().hex[:6]}"
     logger.info("Starting background worker %s", worker_id)
 
+    # Clean up any stale/orphaned jobs left over from previous process termination
+    try:
+        async with AsyncSessionLocal() as session:
+            await session.execute(
+                update(Job)
+                .where(Job.state == "claimed")
+                .values(state="failed")
+            )
+            await session.execute(
+                update(Analysis)
+                .where(Analysis.status.in_(["running", "queued"]))
+                .values(status="failed", error="Interrupted by server restart")
+            )
+            await session.commit()
+    except Exception as e:
+        logger.debug("Stale jobs cleanup warning: %s", e)
+
     while True:
         try:
             async with AsyncSessionLocal() as session:

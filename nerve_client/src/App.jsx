@@ -30,13 +30,33 @@ export default function App() {
     loadBenchmark();
   }, []);
 
-  const loadAnalyses = async () => {
+  const resetToNewScan = () => {
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+    }
+    setCurrentAnalysisId(null);
+    setAnalysisData(null);
+    setHypotheses([]);
+    setFindings([]);
+    setScoreData(null);
+    setReports({ executive: '', technical: '' });
+    setEvents([]);
+    setActiveNode('idle');
+  };
+
+  const loadAnalyses = async (autoSelect = false) => {
     try {
       const res = await fetch('/api/analyses');
       const data = await res.json();
       setAnalyses(data);
-      if (data.length > 0 && !currentAnalysisId) {
-        selectAnalysis(data[0].id);
+      if (!currentAnalysisId) {
+        const activeOne = data.find((a) => a.status === 'running' || a.status === 'queued');
+        if (activeOne) {
+          selectAnalysis(activeOne.id);
+        } else if (autoSelect && data.length > 0) {
+          selectAnalysis(data[0].id);
+        }
       }
     } catch (err) {
       console.error('Analyses fetch error:', err);
@@ -55,6 +75,10 @@ export default function App() {
 
   // 2. Select an analysis and load its full details
   const selectAnalysis = async (id) => {
+    if (!id) {
+      resetToNewScan();
+      return;
+    }
     setCurrentAnalysisId(id);
     setEvents([]);
 
@@ -111,9 +135,13 @@ export default function App() {
         else if (t.includes('yara') || t.includes('intel')) setActiveNode('threat_intel');
         else if (t.includes('verify') || t.includes('finding')) setActiveNode('verifier');
         else if (t.includes('score')) setActiveNode('score');
+        else if (t.includes('cancelled')) {
+          setActiveNode('idle');
+          loadAnalyses(false);
+        }
         else if (t.includes('report') || t.includes('completed')) {
           setActiveNode('done');
-          loadAnalyses();
+          loadAnalyses(false);
         }
       } catch (err) {
         console.error('Event parse error:', err);
@@ -143,7 +171,7 @@ export default function App() {
       const data = await res.json();
       setIsUploading(false);
       if (data.analysis_id) {
-        loadAnalyses();
+        loadAnalyses(false);
         selectAnalysis(data.analysis_id);
       }
     } catch (err) {
@@ -158,9 +186,11 @@ export default function App() {
       await fetch(`/api/analyses/${currentAnalysisId}/cancel`, { method: 'POST' });
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
+        eventSourceRef.current = null;
       }
       setAnalysisData((prev) => (prev ? { ...prev, status: 'cancelled' } : prev));
-      loadAnalyses();
+      setActiveNode('idle');
+      loadAnalyses(false);
     } catch (e) {
       console.error('Cancel failed:', e);
     }
@@ -291,7 +321,13 @@ export default function App() {
             {analyses.length > 0 && (
               <select
                 value={currentAnalysisId || ''}
-                onChange={(e) => selectAnalysis(e.target.value)}
+                onChange={(e) => {
+                  if (!e.target.value) {
+                    resetToNewScan();
+                  } else {
+                    selectAnalysis(e.target.value);
+                  }
+                }}
                 style={{
                   background: 'var(--bg-card)',
                   color: 'var(--text-main)',
@@ -301,12 +337,49 @@ export default function App() {
                   fontSize: '13px',
                 }}
               >
+                <option value="">➕ New Scan / Drop APK</option>
                 {analyses.map((a) => (
                   <option key={a.id} value={a.id}>
                     {a.filename} ({a.verdict || a.status})
                   </option>
                 ))}
               </select>
+            )}
+
+            {currentAnalysisId && (
+              <button
+                onClick={resetToNewScan}
+                style={{
+                  background: 'rgba(99, 102, 241, 0.15)',
+                  color: 'var(--accent-indigo)',
+                  border: '1px solid var(--accent-indigo)',
+                  borderRadius: '6px',
+                  padding: '8px 14px',
+                  fontSize: '13px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                }}
+              >
+                ➕ New Scan
+              </button>
+            )}
+
+            {(analysisData?.status === 'running' || analysisData?.status === 'queued') && (
+              <button
+                onClick={handleCancelScan}
+                style={{
+                  background: 'rgba(244, 63, 94, 0.2)',
+                  color: 'var(--accent-rose)',
+                  border: '1px solid var(--accent-rose)',
+                  padding: '8px 14px',
+                  borderRadius: '6px',
+                  fontSize: '13px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                }}
+              >
+                ⏹ Cancel Scan
+              </button>
             )}
           </div>
         </div>
@@ -393,6 +466,22 @@ export default function App() {
                       </button>
                     )}
                   </div>
+                </div>
+              )}
+
+              {!analysisData && (
+                <div
+                  style={{
+                    background: 'var(--bg-card)',
+                    border: '1px dashed var(--border-color)',
+                    borderRadius: '8px',
+                    padding: '20px',
+                    textAlign: 'center',
+                    color: 'var(--text-dim)',
+                    fontSize: '13px',
+                  }}
+                >
+                  Ready for analysis. Select an APK file above to start multi-agent triage, or choose a scan from history.
                 </div>
               )}
             </div>
