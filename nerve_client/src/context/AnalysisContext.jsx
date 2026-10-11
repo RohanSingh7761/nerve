@@ -32,6 +32,54 @@ export function AnalysisProvider({ children }) {
     return [];
   }, []);
 
+  const selectAnalysis = useCallback(async (id) => {
+    if (!id) {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+      setCurrentAnalysisId(null);
+      setAnalysisData(null);
+      setHypotheses([]);
+      setFindings([]);
+      setScoreData(null);
+      setReports({ executive: '', technical: '' });
+      setEvents([]);
+      setActiveNode('idle');
+      return;
+    }
+
+    setCurrentAnalysisId(id);
+
+    try {
+      const [anaRes, hypRes, findRes, scoreRes, repExecRes, repTechRes] = await Promise.all([
+        fetch(`/api/analyses/${id}`).then((r) => (r.ok ? r.json() : null)),
+        fetch(`/api/analyses/${id}/hypotheses`).then((r) => (r.ok ? r.json() : [])),
+        fetch(`/api/analyses/${id}/findings`).then((r) => (r.ok ? r.json() : [])),
+        fetch(`/api/analyses/${id}/score`).then((r) => (r.ok ? r.json() : null)),
+        fetch(`/api/analyses/${id}/reports/executive`).then((r) => (r.ok ? r.json() : null)),
+        fetch(`/api/analyses/${id}/reports/technical`).then((r) => (r.ok ? r.json() : null)),
+      ]);
+
+      setAnalysisData(anaRes);
+      setHypotheses(hypRes || []);
+      setFindings(findRes || []);
+      setScoreData(scoreRes);
+      setReports({
+        executive: repExecRes?.markdown || 'Executive report will appear here once generated.',
+        technical: repTechRes?.markdown || 'Technical report will appear here once generated.',
+      });
+
+      if (anaRes && (anaRes.status === 'running' || anaRes.status === 'queued')) {
+        startEventStream(id);
+      } else {
+        setActiveNode(anaRes?.status === 'completed' ? 'done' : 'idle');
+      }
+    } catch (e) {
+      console.error('Failed to load analysis details:', e);
+    }
+  }, []);
+
   const startEventStream = useCallback((id) => {
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
@@ -41,35 +89,70 @@ export function AnalysisProvider({ children }) {
     const es = new EventSource(`/api/analyses/${id}/events`);
     eventSourceRef.current = es;
 
+    const handlePayload = (parsed) => {
+      setEvents((prev) => [parsed, ...prev.slice(0, 99)]);
+
+      const t = parsed.type || parsed.event || '';
+      if (t.includes('intake')) setActiveNode('intake');
+      else if (t.includes('orchestrator')) setActiveNode('orchestrator');
+      else if (t.includes('static')) setActiveNode('static');
+      else if (t.includes('investigate') || t.includes('reverse') || t.includes('jadx')) setActiveNode('reverse_eng');
+      else if (t.includes('threat') || t.includes('yara') || t.includes('intel')) setActiveNode('threat_intel');
+      else if (t.includes('verify') || t.includes('finding')) setActiveNode('verifier');
+      else if (t.includes('score')) setActiveNode('score');
+      else if (t.includes('report')) setActiveNode('report');
+      else if (t.includes('cancelled')) {
+        setActiveNode('idle');
+        setAnalysisData((prev) => (prev && prev.id === id ? { ...prev, status: 'cancelled' } : prev));
+        loadAnalyses();
+      } else if (t.includes('completed') || t === 'done') {
+        setActiveNode('done');
+        setAnalysisData((prev) => (prev && prev.id === id ? { ...prev, status: 'completed' } : prev));
+        loadAnalyses();
+        // Reload all full details now that reports & score are written
+        selectAnalysis(id);
+      }
+    };
+
     es.onmessage = (e) => {
       try {
         const parsed = JSON.parse(e.data);
-        setEvents((prev) => [parsed, ...prev.slice(0, 99)]);
-
-        const t = parsed.type || '';
-        if (t.includes('intake')) setActiveNode('intake');
-        else if (t.includes('orchestrator')) setActiveNode('orchestrator');
-        else if (t.includes('static')) setActiveNode('static');
-        else if (t.includes('reverse') || t.includes('jadx')) setActiveNode('reverse_eng');
-        else if (t.includes('yara') || t.includes('intel')) setActiveNode('threat_intel');
-        else if (t.includes('verify') || t.includes('finding')) setActiveNode('verifier');
-        else if (t.includes('score')) setActiveNode('score');
-        else if (t.includes('cancelled')) {
-          setActiveNode('idle');
-          loadAnalyses();
-        } else if (t.includes('report') || t.includes('completed')) {
-          setActiveNode('done');
-          loadAnalyses();
-        }
+        handlePayload(parsed);
       } catch (err) {
         console.error('Event parse error:', err);
       }
     };
 
+    // Also register named listeners in case EventSource dispatches by event name
+    const eventNames = [
+      'analysis_started',
+      'intake_completed',
+      'orchestrator_completed',
+      'static_completed',
+      'investigate_completed',
+      'verifier_completed',
+      'orchestrator_resolved',
+      'score_completed',
+      'report_completed',
+      'analysis_completed',
+      'done'
+    ];
+    eventNames.forEach((evt) => {
+      es.addEventListener(evt, (e) => {
+        try {
+          const parsed = JSON.parse(e.data);
+          handlePayload({ ...parsed, type: evt });
+        } catch (err) {
+          console.error(`Event ${evt} parse error:`, err);
+        }
+      });
+    });
+
     es.onerror = () => {
+      // In case SSE drops, polling below will keep status in sync
       es.close();
     };
-  }, [loadAnalyses]);
+  }, [loadAnalyses, selectAnalysis]);
 
   // Load initial application data on mount
   useEffect(() => {
@@ -100,54 +183,27 @@ export function AnalysisProvider({ children }) {
     };
   }, []);
 
-  const selectAnalysis = useCallback(async (id) => {
-    if (!id) {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-        eventSourceRef.current = null;
+  // Periodic polling fallback to guarantee UI updates even if SSE buffers or reconnects
+  useEffect(() => {
+    if (!currentAnalysisId) return;
+    if (!analysisData || (analysisData.status !== 'running' && analysisData.status !== 'queued')) return;
+
+    const timer = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/analyses/${currentAnalysisId}`);
+        if (!res.ok) return;
+        const fresh = await res.json();
+        if (fresh.status !== analysisData.status) {
+          // Status changed! Refresh everything
+          selectAnalysis(currentAnalysisId);
+        }
+      } catch (e) {
+        console.debug('Polling check error:', e);
       }
-      setCurrentAnalysisId(null);
-      setAnalysisData(null);
-      setHypotheses([]);
-      setFindings([]);
-      setScoreData(null);
-      setReports({ executive: '', technical: '' });
-      setEvents([]);
-      setActiveNode('idle');
-      return;
-    }
+    }, 2500);
 
-    setCurrentAnalysisId(id);
-    setEvents([]);
-
-    try {
-      const [anaRes, hypRes, findRes, scoreRes, repExecRes, repTechRes] = await Promise.all([
-        fetch(`/api/analyses/${id}`).then((r) => (r.ok ? r.json() : null)),
-        fetch(`/api/analyses/${id}/hypotheses`).then((r) => (r.ok ? r.json() : [])),
-        fetch(`/api/analyses/${id}/findings`).then((r) => (r.ok ? r.json() : [])),
-        fetch(`/api/analyses/${id}/score`).then((r) => (r.ok ? r.json() : null)),
-        fetch(`/api/analyses/${id}/reports/executive`).then((r) => (r.ok ? r.json() : null)),
-        fetch(`/api/analyses/${id}/reports/technical`).then((r) => (r.ok ? r.json() : null)),
-      ]);
-
-      setAnalysisData(anaRes);
-      setHypotheses(hypRes || []);
-      setFindings(findRes || []);
-      setScoreData(scoreRes);
-      setReports({
-        executive: repExecRes?.markdown || 'Executive report will appear here once generated.',
-        technical: repTechRes?.markdown || 'Technical report will appear here once generated.',
-      });
-
-      if (anaRes && (anaRes.status === 'running' || anaRes.status === 'queued')) {
-        startEventStream(id);
-      } else {
-        setActiveNode(anaRes?.status === 'completed' ? 'done' : 'idle');
-      }
-    } catch (e) {
-      console.error('Failed to load analysis details:', e);
-    }
-  }, [startEventStream]);
+    return () => clearInterval(timer);
+  }, [currentAnalysisId, analysisData, selectAnalysis]);
 
   const cancelScan = useCallback(async (id = currentAnalysisId) => {
     if (!id) return;

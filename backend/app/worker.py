@@ -98,21 +98,52 @@ async def process_analysis_job(job_id: int, analysis_id: uuid.UUID) -> None:
                 logger.info("Analysis %s was cancelled before start", analysis_id)
                 return
 
-        # Run the multi-agent LangGraph workflow with Neatlogs tracing
+        # Run the multi-agent LangGraph workflow with streaming & Neatlogs tracing
         logger.info("Executing LangGraph for analysis %s", analysis_id)
+        node_event_map = {
+            "intake": ("intake_completed", "Static intake and packaging analysis complete"),
+            "orchestrator": ("orchestrator_completed", "Triage orchestration and investigation plan formulated"),
+            "static": ("static_completed", "Static analysis and initial threat hypotheses generated"),
+            "investigate": ("investigate_completed", "Deep reverse engineering and threat intelligence investigation finished"),
+            "verify": ("verifier_completed", "Evidence verification and entailment check completed"),
+            "resolve": ("orchestrator_resolved", "Conflict resolution and plan convergence evaluated"),
+            "score": ("score_completed", "Deterministic risk scoring and rule attribution calculated"),
+            "report": ("report_completed", "Executive and technical markdown reports generated"),
+        }
+
+        async def _run_stream():
+            state_acc = {}
+            async for mode, chunk in graph.astream(
+                initial_state,
+                config={"configurable": {"thread_id": str(analysis_id)}},
+                stream_mode=["updates", "values"],
+            ):
+                if mode == "updates" and isinstance(chunk, dict):
+                    for node_name, node_update in chunk.items():
+                        ev_type, ev_desc = node_event_map.get(
+                            node_name,
+                            (f"{node_name}_completed", f"Completed node {node_name}")
+                        )
+                        await emit_analysis_event(
+                            analysis_id,
+                            ev_type,
+                            {
+                                "node": node_name,
+                                "description": ev_desc,
+                                "items": len(node_update) if isinstance(node_update, dict) else 1,
+                            },
+                        )
+                elif mode == "values" and isinstance(chunk, dict):
+                    state_acc = chunk
+            return state_acc
+
         try:
             import neatlogs
             with neatlogs.trace(name=f"triage-{analysis.sha256[:8]}", kind="WORKFLOW"):
-                final_state = await graph.ainvoke(
-                    initial_state,
-                    config={"configurable": {"thread_id": str(analysis_id)}},
-                )
+                final_state = await _run_stream()
             neatlogs.flush()
         except ImportError:
-            final_state = await graph.ainvoke(
-                initial_state,
-                config={"configurable": {"thread_id": str(analysis_id)}},
-            )
+            final_state = await _run_stream()
 
         # Check if cancelled mid-run
         async with AsyncSessionLocal() as session:
