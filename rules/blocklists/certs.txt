@@ -1,0 +1,4 @@
+# Local Certificate Blocklist (SHA-256 fingerprint)
+# Format: <cert_sha256> <family/actor>
+0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef MaliciousDevCert1
+fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210 MaliciousDevCert2
