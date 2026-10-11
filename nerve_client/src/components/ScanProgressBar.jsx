@@ -8,6 +8,7 @@ const STEPS = [
   { id: 'reverse_eng', label: 'Reverse Eng', desc: 'Jadx Decompilation' },
   { id: 'threat_intel', label: 'Threat Intel', desc: 'YARA & IOCs' },
   { id: 'verifier', label: 'Verifier Agent', desc: 'Claim Entailment' },
+  { id: 'vulnerability', label: 'Vulnerability Agent', desc: 'MASVS & Posture' },
   { id: 'score', label: 'Risk Scoring', desc: 'Deterministic Math' },
   { id: 'report', label: 'Reports', desc: 'Citations & Export' },
 ];
@@ -17,6 +18,7 @@ export default function ScanProgressBar() {
 
   if (!analysisData) return null;
 
+  const totalSteps = STEPS.length;
   const status = analysisData.status || 'queued';
   const isRunning = status === 'running' || status === 'queued';
   const isCompleted = status === 'completed';
@@ -25,15 +27,16 @@ export default function ScanProgressBar() {
 
   // Determine current active step index (0-based)
   const getStepIndex = () => {
-    if (isCompleted) return 8;
+    if (isCompleted) return totalSteps;
     if (activeNode === 'intake') return 0;
     if (activeNode === 'orchestrator') return 1;
     if (activeNode === 'static') return 2;
     if (activeNode === 'reverse_eng') return 3;
     if (activeNode === 'threat_intel') return 4;
     if (activeNode === 'verifier') return 5;
-    if (activeNode === 'score') return 6;
-    if (activeNode === 'report' || activeNode === 'done') return 7;
+    if (activeNode === 'vulnerability') return 6;
+    if (activeNode === 'score') return 7;
+    if (activeNode === 'report' || activeNode === 'done') return 8;
     return 0;
   };
 
@@ -41,8 +44,8 @@ export default function ScanProgressBar() {
   const percentage = isCompleted
     ? 100
     : isCancelled || isFailed
-    ? Math.round(((currentStepIdx + 1) / 8) * 100)
-    : Math.max(12, Math.round(((currentStepIdx + 1) / 8) * 100));
+    ? Math.round(((currentStepIdx + 1) / totalSteps) * 100)
+    : Math.max(10, Math.round(((currentStepIdx + 1) / totalSteps) * 100));
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-5 mb-6 space-y-4">
@@ -55,8 +58,8 @@ export default function ScanProgressBar() {
           {isCancelled && <Ban className="w-4 h-4 text-slate-500" />}
 
           <h3 className="text-sm font-bold text-slate-900">
-            {isCompleted && 'Triage Complete: All 8 Steps Finished Successfully'}
-            {isRunning && `Executing Step ${Math.min(currentStepIdx + 1, 8)} of 8: ${STEPS[Math.min(currentStepIdx, 7)].label}`}
+            {isCompleted && `Triage Complete: All ${totalSteps} Steps Finished Successfully`}
+            {isRunning && `Executing Step ${Math.min(currentStepIdx + 1, totalSteps)} of ${totalSteps}: ${STEPS[Math.min(currentStepIdx, totalSteps - 1)].label}`}
             {isFailed && `Scan Halted: ${analysisData.error || 'Execution encountered an error'}`}
             {isCancelled && 'Scan Cancelled by User'}
           </h3>

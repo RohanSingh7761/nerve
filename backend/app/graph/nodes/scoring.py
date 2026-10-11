@@ -22,6 +22,12 @@ RULES_TABLE = {
     "R08": {"label": "Packer / heavy obfuscation (APKiD)", "weight": 0.15},
     "R09": {"label": "Excessive permissions beyond declared purpose", "weight": 0.10},
     "R10": {"label": "Contacts/call-log/location harvesting", "weight": 0.40},
+    # Vulnerability & Security Posture Rules (OWASP MASVS)
+    "V01": {"label": "Application Debuggable flag enabled (JDWP exposure)", "weight": 0.45},
+    "V02": {"label": "Insecure Application Backup enabled (ADB backup leak)", "weight": 0.25},
+    "V03": {"label": "Cleartext HTTP communication permitted", "weight": 0.35},
+    "V04": {"label": "User custom CA certificates trusted in network config", "weight": 0.30},
+    "V05": {"label": "Unprotected Exported Components (Activity/Service/Provider)", "weight": 0.40},
 }
 
 

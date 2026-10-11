@@ -106,6 +106,7 @@ async def process_analysis_job(job_id: int, analysis_id: uuid.UUID) -> None:
             "static": ("static_completed", "Static analysis and initial threat hypotheses generated"),
             "investigate": ("investigate_completed", "Deep reverse engineering and threat intelligence investigation finished"),
             "verify": ("verifier_completed", "Evidence verification and entailment check completed"),
+            "vulnerability": ("vulnerability_completed", "Application security posture and vulnerability detection completed"),
             "resolve": ("orchestrator_resolved", "Conflict resolution and plan convergence evaluated"),
             "score": ("score_completed", "Deterministic risk scoring and rule attribution calculated"),
             "report": ("report_completed", "Executive and technical markdown reports generated"),

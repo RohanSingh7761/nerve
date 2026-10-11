@@ -6,11 +6,11 @@ from typing import Literal
 from app.graph.state import NerveState
 
 
-def depth_router(state: NerveState) -> Literal["score", "investigate"]:
-    """Decide whether to execute deep investigation or shallow scoring."""
+def depth_router(state: NerveState) -> Literal["vulnerability", "investigate"]:
+    """Decide whether to execute deep investigation or proceed to vulnerability posture check."""
     plan = state.get("plan", {})
     if plan.get("depth") == "shallow":
-        return "score"
+        return "vulnerability"
     return "investigate"
 
 

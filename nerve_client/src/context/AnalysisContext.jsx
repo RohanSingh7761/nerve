@@ -99,6 +99,7 @@ export function AnalysisProvider({ children }) {
       else if (t.includes('investigate') || t.includes('reverse') || t.includes('jadx')) setActiveNode('reverse_eng');
       else if (t.includes('threat') || t.includes('yara') || t.includes('intel')) setActiveNode('threat_intel');
       else if (t.includes('verify') || t.includes('finding')) setActiveNode('verifier');
+      else if (t.includes('vulnerability')) setActiveNode('vulnerability');
       else if (t.includes('score')) setActiveNode('score');
       else if (t.includes('report')) setActiveNode('report');
       else if (t.includes('cancelled')) {
@@ -131,6 +132,7 @@ export function AnalysisProvider({ children }) {
       'static_completed',
       'investigate_completed',
       'verifier_completed',
+      'vulnerability_completed',
       'orchestrator_resolved',
       'score_completed',
       'report_completed',

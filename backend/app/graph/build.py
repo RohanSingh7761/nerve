@@ -15,6 +15,7 @@ from app.graph.nodes.report import report_agent_node
 from app.graph.nodes.scoring import risk_scoring_node
 from app.graph.nodes.static_agent import static_agent_node
 from app.graph.nodes.verifier import verifier_node
+from app.graph.nodes.vulnerability import vulnerability_agent_node
 from app.graph.routing import depth_router, loop_router
 from app.graph.state import NerveState
 
@@ -31,6 +32,7 @@ def build_nerve_graph(checkpointer: Optional[Any] = None) -> Any:
     builder.add_node("static", static_agent_node)
     builder.add_node("investigate", investigate_node)
     builder.add_node("verify", verifier_node)
+    builder.add_node("vulnerability", vulnerability_agent_node)
     builder.add_node("resolve", orchestrator_resolve_node)
     builder.add_node("score", risk_scoring_node)
     builder.add_node("report", report_agent_node)
@@ -44,11 +46,12 @@ def build_nerve_graph(checkpointer: Optional[Any] = None) -> Any:
     builder.add_conditional_edges(
         "static",
         depth_router,
-        {"investigate": "investigate", "score": "score"},
+        {"investigate": "investigate", "vulnerability": "vulnerability"},
     )
 
     builder.add_edge("investigate", "verify")
-    builder.add_edge("verify", "resolve")
+    builder.add_edge("verify", "vulnerability")
+    builder.add_edge("vulnerability", "resolve")
 
     # Conditional routing after resolution / conflict check
     builder.add_conditional_edges(
