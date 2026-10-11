@@ -34,6 +34,7 @@ router = APIRouter(prefix="/analyses", tags=["Analyses"])
 async def create_analysis(
     file: UploadFile = File(...),
     variant: str = Form("v2_multi"),
+    force_rescan: bool = Form(False),
     db: AsyncSession = Depends(get_db),
 ):
     """Upload an Android APK for multi-agent triage."""
@@ -47,23 +48,27 @@ async def create_analysis(
     md5 = hashlib.md5(content).hexdigest()
     size_bytes = len(content)
 
-    # Cache check (§6.1): return existing analysis if identical SHA-256 and variant
-    stmt = (
-        select(Analysis)
-        .where(Analysis.sha256 == sha256, Analysis.variant == variant, Analysis.status == "completed")
-        .order_by(desc(Analysis.created_at))
-        .limit(1)
-    )
-    result = await db.execute(stmt)
-    cached = result.scalar_one_or_none()
-    if cached:
-        logger.info("Cache hit for SHA-256: %s", sha256)
-        return {
-            "analysis_id": str(cached.id),
-            "cached": True,
-            "status": cached.status,
-            "verdict": cached.verdict,
-        }
+    # Cache check (§6.1): return existing analysis if identical SHA-256 and variant (unless force_rescan is requested)
+    if not force_rescan:
+        stmt = (
+            select(Analysis)
+            .where(Analysis.sha256 == sha256, Analysis.variant == variant, Analysis.status == "completed")
+            .order_by(desc(Analysis.created_at))
+            .limit(1)
+        )
+        result = await db.execute(stmt)
+        cached = result.scalar_one_or_none()
+        if cached:
+            logger.info("Cache hit for SHA-256: %s", sha256)
+            return {
+                "analysis_id": str(cached.id),
+                "cached": True,
+                "status": cached.status,
+                "verdict": cached.verdict,
+                "sha256": sha256,
+                "filename": cached.filename,
+                "created_at": cached.created_at.isoformat() if cached.created_at else None,
+            }
 
     # Store file safely as <sha256>.sample (non-executable)
     sample_filename = f"{sha256}.sample"
