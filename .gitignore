@@ -47,3 +47,4 @@ contracts/deployments/
 
 .env
 .env.local
+neatlog.md
