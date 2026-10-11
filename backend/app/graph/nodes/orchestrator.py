@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from typing import Any, Literal
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, AliasChoices
 
 from app.graph.state import NerveState
 from app.llm.client import complete_json
@@ -14,9 +14,15 @@ logger = logging.getLogger("nerve.nodes.orchestrator")
 
 
 class OrchestratorPlan(BaseModel):
-    depth: Literal["shallow", "deep"] = "deep"
+    depth: Literal["shallow", "deep"] = Field(
+        default="deep",
+        validation_alias=AliasChoices("depth", "recommendation", "investigation_depth"),
+    )
     prioritized_hypothesis_ids: list[str] = Field(default_factory=list)
-    rationale: str
+    rationale: str = Field(
+        default="Standard triage decomposition",
+        validation_alias=AliasChoices("rationale", "reason", "reasoning", "explanation"),
+    )
     stop_early: bool = False
 
 
@@ -92,7 +98,10 @@ class OrchestratorResolution(BaseModel):
     resolutions: list[dict[str, Any]] = Field(default_factory=list)
     retry_hypotheses: list[str] = Field(default_factory=list)
     should_stop: bool = True
-    stop_reason: str
+    stop_reason: str = Field(
+        default="Completed investigation cycle",
+        validation_alias=AliasChoices("stop_reason", "reason", "rationale"),
+    )
 
 
 async def orchestrator_resolve_node(state: NerveState) -> dict[str, Any]:

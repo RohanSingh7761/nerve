@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import re
 from typing import Any
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, AliasChoices
 
 from app.graph.state import NerveState
 from app.llm.client import complete_json
@@ -14,8 +14,12 @@ logger = logging.getLogger("nerve.nodes.report")
 
 
 class ReportOutput(BaseModel):
-    executive_markdown: str
-    technical_markdown: str
+    executive_markdown: str = Field(
+        validation_alias=AliasChoices("executive_markdown", "executive_report", "executive", "summary_report")
+    )
+    technical_markdown: str = Field(
+        validation_alias=AliasChoices("technical_markdown", "technical_report", "technical", "full_report")
+    )
 
 
 def check_citations(report_text: str, valid_artifact_ids: set[str]) -> dict[str, Any]:

@@ -78,7 +78,11 @@ class Settings(BaseSettings):
     nerve_fault: str = ""  # jadx_crash | llm_rate_limit
 
     model_config = {
-        "env_file": ".env",
+        "env_file": (
+            str(PROJECT_ROOT / ".env"),
+            str(BACKEND_ROOT / ".env"),
+            ".env",
+        ),
         "env_file_encoding": "utf-8",
         "extra": "ignore",
         "protected_namespaces": (),

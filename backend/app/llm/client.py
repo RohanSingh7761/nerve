@@ -237,10 +237,11 @@ async def complete_json(
     for provider in usable:
         cfg = REGISTRY.get(provider, {})
         full_model = resolve_model(provider, tier)
+        effective_temp = 1.0 if ("gemini-3" in full_model and temperature == 0.0) else temperature
         kwargs: dict[str, Any] = {
             "model": full_model,
             "messages": list(messages),
-            "temperature": temperature,
+            "temperature": effective_temp,
             "max_tokens": max_tokens,
             "timeout": 60,
         }
