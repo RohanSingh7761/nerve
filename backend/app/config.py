@@ -77,7 +77,12 @@ class Settings(BaseSettings):
     # ── Demo / Testing ────────────────────────────────────────────
     nerve_fault: str = ""  # jadx_crash | llm_rate_limit
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
+    model_config = {
+        "env_file": ".env",
+        "env_file_encoding": "utf-8",
+        "extra": "ignore",
+        "protected_namespaces": (),
+    }
 
     # ── Derived helpers ───────────────────────────────────────────
     @property
