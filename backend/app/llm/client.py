@@ -104,15 +104,29 @@ def resolve_model(provider: str, tier: str) -> str:
     """Resolve full LiteLLM model identifier for provider + tier."""
     settings = get_settings()
     cfg = REGISTRY[provider]
+    prefix = cfg.get("prefix", "")
 
     # Check env override first (e.g. MODEL_TRIAGE, MODEL_STRONG, MODEL_VERIFY)
     tier_override = getattr(settings, f"model_{tier.lower()}", "")
+    
+    # Only use tier_override if it matches the current provider or doesn't belong to another provider
     if tier_override:
-        model_name = tier_override
+        # If user explicitly configured e.g. gemini-3-flash-preview, do not force it onto groq/openai/etc.
+        override_matches_provider = (
+            tier_override.startswith(f"{prefix}/")
+            or (prefix == "gemini" and ("gemini" in tier_override or tier_override.startswith("models/")))
+            or (prefix == "groq" and ("llama" in tier_override or "gpt-oss" in tier_override or "mixtral" in tier_override or "qwen" in tier_override))
+            or (prefix == "anthropic" and "claude" in tier_override)
+            or (prefix not in ["gemini", "anthropic"])
+        )
+        if override_matches_provider:
+            # Strip groq/ prefix if present because prefix is prepended below
+            model_name = tier_override[len("groq/"):] if (prefix == "groq" and tier_override.startswith("groq/")) else tier_override
+        else:
+            model_name = cfg["models"].get(tier, cfg["models"].get("triage", ""))
     else:
         model_name = cfg["models"].get(tier, cfg["models"].get("triage", ""))
 
-    prefix = cfg.get("prefix", "")
     # If provider is gemini and model_name has models/ prefix, strip it so litellm formats as gemini/<model>
     if prefix == "gemini" and model_name.startswith("models/"):
         model_name = model_name[len("models/"):]
@@ -248,9 +262,11 @@ async def complete_json(
 
         # Provider specific base/key
         if cfg.get("base_env"):
-            kwargs["api_base"] = os.getenv(cfg["base_env"])
+            base_var = cfg["base_env"]
+            kwargs["api_base"] = os.getenv(base_var) or getattr(settings, base_var.lower(), None)
         if cfg.get("key_env"):
-            kwargs["api_key"] = os.getenv(cfg["key_env"])
+            key_var = cfg["key_env"]
+            kwargs["api_key"] = os.getenv(key_var) or getattr(settings, key_var.lower(), None)
 
         # Fault injection test (NERVE_FAULT=llm_rate_limit)
         if settings.nerve_fault == "llm_rate_limit" and not _fault_injected:
@@ -310,6 +326,7 @@ async def complete_json(
                         parse_err,
                     )
                     # Attempt 1 repair prompt on the same provider
+                    await _pace_provider(provider)
                     repair_messages = list(messages) + [
                         {"role": "assistant", "content": raw_content},
                         {
