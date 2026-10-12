@@ -8,6 +8,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+# Initialize Neatlogs early so LiteLLM auto-instrumentation hooks attach before any module imports litellm
+from app.obs import init_neatlogs
+init_neatlogs()
+
 from app.api import api_router
 from app.config import get_settings
 from app.db.models import Base

@@ -24,6 +24,13 @@ logger = logging.getLogger("nerve.llm")
 # Silence noisy litellm logs
 litellm.suppress_debug_info = True
 
+try:
+    import neatlogs
+    _neatlogs_agent_span = neatlogs.span(kind="AGENT", name="llm_agent_complete", capture_input=True, capture_output=True)
+except Exception:
+    def _neatlogs_agent_span(fn):
+        return fn
+
 T = TypeVar("T", bound=BaseModel)
 
 PROVIDERS_FILE = Path(__file__).resolve().parent / "providers.yaml"
@@ -214,6 +221,27 @@ async def log_call_to_db(
         return None
 
 
+def _annotate_telemetry_span(provider: str, model: str, tokens_in: int, tokens_out: int, ref_cost: float):
+    """Set LLM semantic attributes on the active Neatlogs telemetry span."""
+    try:
+        from opentelemetry import trace as otel_trace
+        span = otel_trace.get_current_span()
+        if span and span.is_recording():
+            span.set_attribute("neatlogs.llm.provider", provider)
+            span.set_attribute("neatlogs.llm.model_name", model)
+            span.set_attribute("neatlogs.llm.token_count.prompt", tokens_in)
+            span.set_attribute("neatlogs.llm.token_count.completion", tokens_out)
+            span.set_attribute("neatlogs.llm.token_count.total", tokens_in + tokens_out)
+            span.set_attribute("neatlogs.llm.cost_usd", ref_cost)
+            span.set_attribute("llm.model_name", model)
+            span.set_attribute("llm.token_count.prompt", tokens_in)
+            span.set_attribute("llm.token_count.completion", tokens_out)
+            span.set_attribute("llm.token_count.total", tokens_in + tokens_out)
+    except Exception:
+        pass
+
+
+@_neatlogs_agent_span
 async def complete_json(
     tier: str,
     messages: list[dict[str, str]],
@@ -318,6 +346,7 @@ async def complete_json(
                         reference_cost_usd=ref_cost,
                         fallback_of=prev_call_id,
                     )
+                    _annotate_telemetry_span(provider, full_model, tokens_in, tokens_out, ref_cost)
                     return validated
 
                 except (json.JSONDecodeError, ValidationError) as parse_err:
@@ -364,6 +393,7 @@ async def complete_json(
                         reference_cost_usd=ref_cost,
                         fallback_of=prev_call_id,
                     )
+                    _annotate_telemetry_span(provider, full_model, tokens_in, tokens_out, ref_cost)
                     return validated
 
             except (

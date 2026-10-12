@@ -18,8 +18,9 @@ def init_neatlogs() -> bool:
     if _neatlogs_initialized:
         return True
 
+    import os
     settings = get_settings()
-    api_key = settings.neatlogs_api_key
+    api_key = settings.neatlogs_api_key or os.getenv("NEATLOGS_API_KEY", "")
     if not api_key:
         logger.info("NEATLOGS_API_KEY not set; skipping Neatlogs initialization")
         return False
@@ -29,11 +30,12 @@ def init_neatlogs() -> bool:
 
         neatlogs.init(
             endpoint="https://ingest.neatlogs.com",
-            workflow_name="nerve-agent-workflow",
+            workflow_name="apk-triage-pipeline",
             api_key=api_key,
+            instrumentations=["litellm"],
         )
         _neatlogs_initialized = True
-        logger.info("Neatlogs tracing initialized successfully")
+        logger.info("Neatlogs tracing initialized successfully with LiteLLM instrumentation")
         return True
     except Exception as exc:
         logger.warning("Failed to initialize Neatlogs: %s", exc)

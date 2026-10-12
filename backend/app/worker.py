@@ -113,11 +113,11 @@ async def process_analysis_job(job_id: int, analysis_id: uuid.UUID) -> None:
             "report": ("report_completed", "Executive and technical markdown reports generated"),
         }
 
-        async def _run_stream():
+        async def _run_stream(stream_config: dict):
             state_acc = {}
             async for mode, chunk in graph.astream(
                 initial_state,
-                config={"configurable": {"thread_id": str(analysis_id)}},
+                config=stream_config,
                 stream_mode=["updates", "values"],
             ):
                 if mode == "updates" and isinstance(chunk, dict):
@@ -141,11 +141,43 @@ async def process_analysis_job(job_id: int, analysis_id: uuid.UUID) -> None:
 
         try:
             import neatlogs
-            with neatlogs.trace(name=f"triage-{analysis.sha256[:8]}", kind="WORKFLOW"):
-                final_state = await _run_stream()
+            import json
+
+            handler = neatlogs.langchain_handler()
+            graph_config = {
+                "configurable": {"thread_id": str(analysis_id)},
+                "callbacks": [handler],
+            }
+
+            with neatlogs.trace(name=f"triage-{analysis.sha256[:8]}", kind="WORKFLOW") as tr:
+                input_payload = {
+                    "analysis_id": str(analysis_id),
+                    "sha256": analysis.sha256,
+                    "file_name": analysis.file_name,
+                    "file_size": analysis.file_size,
+                }
+                tr.set_attribute("input.value", json.dumps(input_payload))
+                tr.set_attribute("input.mime_type", "application/json")
+                tr.set_attribute("neatlogs.workflow.input", json.dumps(input_payload))
+
+                final_state = await _run_stream(graph_config)
+
+                output_payload = {
+                    "verdict": (final_state.get("score") or {}).get("verdict", "low_risk"),
+                    "risk_score": (final_state.get("score") or {}).get("risk_score", 0),
+                    "threat_level": (final_state.get("score") or {}).get("threat_level", "LOW"),
+                    "hypotheses_count": len(final_state.get("hypotheses", [])),
+                    "findings_count": len(final_state.get("findings", [])),
+                    "reports_generated": list((final_state.get("reports") or {}).keys()),
+                    "executive_summary": (final_state.get("reports") or {}).get("executive_summary", "")[:500],
+                }
+                tr.set_attribute("output.value", json.dumps(output_payload))
+                tr.set_attribute("output.mime_type", "application/json")
+                tr.set_attribute("neatlogs.workflow.output", json.dumps(output_payload))
+
             neatlogs.flush()
         except ImportError:
-            final_state = await _run_stream()
+            final_state = await _run_stream({"configurable": {"thread_id": str(analysis_id)}})
 
         # Check if cancelled mid-run
         async with AsyncSessionLocal() as session:
