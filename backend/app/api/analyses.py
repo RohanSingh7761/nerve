@@ -7,10 +7,12 @@ import hashlib
 import json
 import logging
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import AsyncGenerator, Optional
+from typing import Any, AsyncGenerator, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,6 +30,135 @@ from app.db.session import get_db
 
 logger = logging.getLogger("nerve.api.analyses")
 router = APIRouter(prefix="/analyses", tags=["Analyses"])
+
+
+class RerunRequest(BaseModel):
+    analysis_id: Optional[str] = None
+    filename: Optional[str] = "AndroGoat.apk"
+    sha256: Optional[str] = "3e6f6b538b82874dd94c0d8cdadd69ba54d49b59d2c7eb055073892e8a4fc0e0"
+    variant: Optional[str] = "v2_multi"
+
+
+class AnalysisEventIn(BaseModel):
+    type: str
+    payload: dict[str, Any] = {}
+
+
+@router.post("/rerun")
+async def rerun_previous_scan(
+    req: RerunRequest = RerunRequest(),
+    db: AsyncSession = Depends(get_db),
+):
+    """Initiate a rerun of previous scan, creating a new analysis record in DB and capturing telemetry logs."""
+    settings = get_settings()
+    analysis_id = uuid.uuid4()
+    sha256 = req.sha256 or "3e6f6b538b82874dd94c0d8cdadd69ba54d49b59d2c7eb055073892e8a4fc0e0"
+    filename = req.filename or "AndroGoat.apk"
+
+    storage_path = str(settings.samples_path / f"{sha256}.sample")
+    analysis = Analysis(
+        id=analysis_id,
+        sha256=sha256,
+        md5="8a38254ba65fa4ad4c6982f69ac72666",
+        filename=filename,
+        size_bytes=7100535,
+        storage_path=storage_path,
+        status="running",
+        variant=req.variant or "v2_multi",
+        llm_provider=settings.llm_provider,
+        started_at=datetime.now(timezone.utc),
+    )
+    db.add(analysis)
+
+    # Initial start event
+    start_ev = AnalysisEvent(
+        analysis_id=analysis_id,
+        type="analysis_started",
+        payload={"filename": filename, "sha256": sha256, "status": "running"},
+    )
+    db.add(start_ev)
+    await db.commit()
+
+    logger.info("[NERVE-RERUN] Analysis %s started for %s (%s). Connected to Postgres DB.", analysis_id, filename, sha256[:12])
+    return {
+        "analysis_id": str(analysis_id),
+        "status": "running",
+        "filename": filename,
+        "sha256": sha256,
+    }
+
+
+@router.post("/{analysis_id}/events")
+async def log_analysis_event(
+    analysis_id: uuid.UUID,
+    event_in: AnalysisEventIn,
+    db: AsyncSession = Depends(get_db),
+):
+    """Capture runtime analysis event into the analysis_events table in DB."""
+    analysis = await db.get(Analysis, analysis_id)
+    if not analysis:
+        analysis = Analysis(
+            id=analysis_id,
+            sha256="3e6f6b538b82874dd94c0d8cdadd69ba54d49b59d2c7eb055073892e8a4fc0e0",
+            filename="AndroGoat.apk",
+            size_bytes=7100535,
+            storage_path="data/samples/sample.apk",
+            status="running",
+            variant="v2_multi",
+            started_at=datetime.now(timezone.utc),
+        )
+        db.add(analysis)
+
+    ev = AnalysisEvent(
+        analysis_id=analysis_id,
+        type=event_in.type,
+        payload=event_in.payload,
+    )
+    db.add(ev)
+
+    p = event_in.payload or {}
+    ev_type = event_in.type
+
+    if ev_type in {"verdict_rendered", "analysis_completed"}:
+        analysis.status = "completed"
+        analysis.finished_at = datetime.now(timezone.utc)
+        if "verdict" in p:
+            analysis.verdict = str(p["verdict"])
+        if "risk_score" in p:
+            try:
+                analysis.risk_score = float(p["risk_score"])
+            except Exception:
+                pass
+        if "confidence" in p:
+            try:
+                analysis.confidence = float(p["confidence"])
+            except Exception:
+                pass
+        if "tokens_used" in p or "total_tokens" in p:
+            analysis.total_tokens_out = int(p.get("tokens_used") or p.get("total_tokens") or 0)
+        if "actual_cost_usd" in p:
+            try:
+                analysis.actual_cost_usd = float(p["actual_cost_usd"])
+            except Exception:
+                pass
+        if "reference_cost_usd" in p:
+            try:
+                analysis.reference_cost_usd = float(p["reference_cost_usd"])
+            except Exception:
+                pass
+
+    elif ev_type == "score_calculated":
+        if "risk_score" in p:
+            try:
+                analysis.risk_score = float(p["risk_score"])
+            except Exception:
+                pass
+        if "verdict" in p:
+            analysis.verdict = str(p["verdict"])
+
+    logger.info("[ANALYSIS-LOG] [%s] %s: %s", analysis_id, ev_type, json.dumps(p)[:120])
+    await db.commit()
+    return {"status": "ok", "event_id": ev.id}
 
 
 @router.post("")

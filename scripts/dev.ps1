@@ -1,8 +1,12 @@
-Write-Host "Starting Nerve Backend & Frontend..." -ForegroundColor Cyan
+$ProjectRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 
-# Start backend in a new process
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd backend; .\.venv\Scripts\activate; uvicorn app.main:app --port 8000"
+Write-Host "Starting Nerve Backend & Frontend from $ProjectRoot..." -ForegroundColor Cyan
+
+# Start backend in a new process with explicit working directory
+$BackendDir = Join-Path $ProjectRoot "backend"
+Start-Process powershell -WorkingDirectory $BackendDir -ArgumentList "-NoExit", "-Command", ".\.venv\Scripts\uvicorn.exe app.main:app --port 8000 --reload"
 
 # Start frontend in current process
-Set-Location nerve_client
+$FrontendDir = Join-Path $ProjectRoot "nerve_client"
+Set-Location $FrontendDir
 npm run dev

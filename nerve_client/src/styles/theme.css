@@ -1,0 +1,85 @@
+@import "@fontsource/space-grotesk/500.css";
+@import "@fontsource/space-grotesk/700.css";
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/500.css";
+
+:root {
+  --bg-app: #F8FAFC;
+  --bg-surface: #FFFFFF;
+  --bg-elevated: #F1F5F9;
+  --bg-glass: rgba(255, 255, 255, 0.85);
+
+  --border-subtle: #E2E8F0;
+  --border-active: #CBD5E1;
+  --border-glow: rgba(79, 70, 229, 0.2);
+
+  --text-primary: #0F172A;
+  --text-secondary: #475569;
+  --text-muted: #94A3B8;
+
+  --agent-intake: #64748B;
+  --agent-orchestrator: #4F46E5;
+  --agent-static: #0284C7;
+  --agent-reverse_eng: #059669;
+  --agent-threat_intel: #E11D48;
+  --agent-verifier: #D97706;
+  --agent-scoring: #EA580C;
+  --agent-report: #7C3AED;
+
+  --font-display: 'Space Grotesk', system-ui, sans-serif;
+  --font-body: 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+body {
+  margin: 0;
+  background-color: var(--bg-app);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-elevated);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-active);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}
+
+/* Tabular figures for telemetry & numbers */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Subtle pulse animations */
+@keyframes haloPulse {
+  0%, 100% {
+    box-shadow: 0 0 10px var(--pulse-color, rgba(79, 70, 229, 0.2));
+  }
+  50% {
+    box-shadow: 0 0 20px var(--pulse-color, rgba(79, 70, 229, 0.35));
+  }
+}
+
+/* React Flow canvas styling */
+.react-flow__background {
+  background-color: var(--bg-app) !important;
+}
+
+.react-flow__attribution {
+  display: none !important;
+}
