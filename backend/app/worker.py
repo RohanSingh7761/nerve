@@ -153,8 +153,8 @@ async def process_analysis_job(job_id: int, analysis_id: uuid.UUID) -> None:
                 input_payload = {
                     "analysis_id": str(analysis_id),
                     "sha256": analysis.sha256,
-                    "file_name": analysis.file_name,
-                    "file_size": analysis.file_size,
+                    "filename": getattr(analysis, "filename", ""),
+                    "size_bytes": getattr(analysis, "size_bytes", 0),
                 }
                 tr.set_attribute("input.value", json.dumps(input_payload))
                 tr.set_attribute("input.mime_type", "application/json")
