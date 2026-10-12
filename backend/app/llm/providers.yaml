@@ -13,10 +13,10 @@ providers:
     prefix: groq
     key_env: GROQ_API_KEY
     models:
-      triage: llama-3.1-8b-instant
-      strong: llama-3.3-70b-versatile
-      verify: llama-3.3-70b-versatile
-    rpm: 20
+      triage: openai/gpt-oss-120b
+      strong: openai/gpt-oss-120b
+      verify: openai/gpt-oss-120b
+    rpm: 30
 
   openrouter:
     prefix: openrouter

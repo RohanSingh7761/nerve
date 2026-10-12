@@ -50,7 +50,8 @@ async def emit_analysis_event(analysis_id: uuid.UUID, event_type: str, payload: 
 
 async def process_analysis_job(job_id: int, analysis_id: uuid.UUID) -> None:
     """Execute the multi-agent graph on the analysis job and persist all outputs."""
-    settings = get_settings()
+    from app.config import reload_settings
+    settings = reload_settings()
     worker_id = f"worker-{uuid.uuid4().hex[:6]}"
 
     async with AsyncSessionLocal() as session:

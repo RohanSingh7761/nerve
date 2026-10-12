@@ -50,6 +50,11 @@ data/samples/*
 !data/samples/.gitkeep
 data/artifacts/*
 !data/artifacts/.gitkeep
+backend/data/
+**/data/samples/*
+!**/data/samples/.gitkeep
+**/data/artifacts/*
+!**/data/artifacts/.gitkeep
 
 # IDE / System
 .vscode/*

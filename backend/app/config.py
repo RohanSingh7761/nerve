@@ -116,3 +116,9 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+def reload_settings() -> Settings:
+    """Clear cached settings so changes to .env or environment take effect immediately."""
+    get_settings.cache_clear()
+    return get_settings()
