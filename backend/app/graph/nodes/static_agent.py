@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import logging
 from typing import Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, AliasChoices, field_validator
 
 from app.graph.state import ArtifactModel, HypothesisModel, NerveState
 from app.llm.client import complete_json
@@ -15,16 +15,72 @@ logger = logging.getLogger("nerve.nodes.static")
 
 
 class StaticHypothesisOutput(BaseModel):
-    category: str  # sms_interception, accessibility_abuse, dynamic_code_loading, persistence, c2_communication, etc.
-    statement: str
-    attack_technique: str
-    confidence: float
-    relevant_indicators: list[str]
+    category: str = Field(
+        default="malware_behavior",
+        validation_alias=AliasChoices("category", "type", "threat_type", "classification"),
+    )
+    statement: str = Field(
+        default="",
+        validation_alias=AliasChoices("statement", "description", "details", "reason", "hypothesis", "summary"),
+    )
+    attack_technique: str = Field(
+        default="T1000",
+        validation_alias=AliasChoices("attack_technique", "technique", "mitre_technique", "technique_id", "attack"),
+    )
+    confidence: float = Field(
+        default=0.7,
+        validation_alias=AliasChoices("confidence", "score", "confidence_score", "probability"),
+    )
+    relevant_indicators: list[str] = Field(
+        default_factory=list,
+        validation_alias=AliasChoices("relevant_indicators", "indicators", "evidence", "signals", "matches"),
+    )
+
+    @field_validator("confidence", mode="before")
+    @classmethod
+    def parse_confidence(cls, v: Any) -> float:
+        if isinstance(v, (int, float)):
+            return float(v)
+        if isinstance(v, str):
+            v_lower = v.strip().lower()
+            if v_lower in ("high", "critical"):
+                return 0.85
+            if v_lower in ("medium", "med"):
+                return 0.65
+            if v_lower in ("low", "info"):
+                return 0.45
+            try:
+                return float(v_lower)
+            except ValueError:
+                return 0.7
+        return 0.7
+
+    @field_validator("statement", mode="before")
+    @classmethod
+    def parse_statement(cls, v: Any) -> str:
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+        return "Suspicious behavioral pattern identified during static metadata analysis."
+
+    @field_validator("relevant_indicators", mode="before")
+    @classmethod
+    def parse_indicators(cls, v: Any) -> list[str]:
+        if isinstance(v, list):
+            return [str(item) for item in v]
+        if isinstance(v, str) and v.strip():
+            return [v.strip()]
+        return []
 
 
 class StaticAgentResponse(BaseModel):
-    hypotheses: list[StaticHypothesisOutput] = Field(default_factory=list)
-    summary: str
+    hypotheses: list[StaticHypothesisOutput] = Field(
+        default_factory=list,
+        validation_alias=AliasChoices("hypotheses", "findings", "items", "results"),
+    )
+    summary: str = Field(
+        default="Static analysis completed",
+        validation_alias=AliasChoices("summary", "rationale", "overview", "explanation", "analysis"),
+    )
 
 
 async def static_agent_node(state: NerveState) -> dict[str, Any]:
@@ -47,8 +103,20 @@ async def static_agent_node(state: NerveState) -> dict[str, Any]:
         "- c2_communication\n"
         "- device_admin_abuse\n"
         "- anti_analysis\n"
-        "- excess_permissions\n"
-        "Only generate hypotheses supported by the static evidence. Output JSON conforming to schema."
+        "- excess_permissions\n\n"
+        "Respond ONLY in valid JSON conforming to this schema:\n"
+        "{\n"
+        '  "summary": "High-level summary of static observations",\n'
+        '  "hypotheses": [\n'
+        "    {\n"
+        '      "category": "excess_permissions",\n'
+        '      "statement": "Application requests broader permissions than needed for declared functionality",\n'
+        '      "attack_technique": "T1000",\n'
+        '      "confidence": 0.8,\n'
+        '      "relevant_indicators": ["android.permission.SEND_SMS"]\n'
+        "    }\n"
+        "  ]\n"
+        "}"
     )
 
     user_prompt = (

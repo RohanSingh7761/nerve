@@ -287,6 +287,8 @@ async def complete_json(
             "max_tokens": max_tokens,
             "timeout": 60,
         }
+        if provider in ("groq", "openai", "custom") or "gpt-oss" in full_model:
+            kwargs["response_format"] = {"type": "json_object"}
 
         # Provider specific base/key
         if cfg.get("base_env"):
